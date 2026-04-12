@@ -23,8 +23,7 @@ run_simulation.bat
 
 **On Unix/Linux/Mac:**
 ```bash
-./run_simulation.sh
-```
+./run_simula
 
 These scripts will:
 1. Compile all Java files using `javac`
