@@ -35,7 +35,7 @@ These scripts will:
 
 The simulation runs three scenarios:
 - **Scenario A**: Normal purchase with standard pricing
-- **Scenario B**: Runtime pricing strategy switch (Standard → Emergency → Discounted)
+- **Scenario B**: Runtime pricing strategy switch
 - **Scenario C**: Atomic rollback when hardware fails
 
 Output files are generated in the `data/` directory:
