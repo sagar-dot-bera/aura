@@ -2,52 +2,43 @@
 
 A pharmacy kiosk management system demonstrating Strategy and Command patterns with atomic transactions.
 
-## How to Build
+## Prerequisites
 
-```bash
-mvn clean compile
-```
+Before running this project, ensure you have the following installed:
 
-## How to Run Tests
-
-Run all tests:
-```bash
-mvn test
-```
-
-Expected output:
-- ✓ 4 PricingStrategyTest cases
-- ✓ 3 CommandRollbackTest cases
+- **Java Development Kit (JDK)**: Version 17 or higher
+  - Check: `java -version`
+  - Download: [Oracle JDK](https://www.oracle.com/java/technologies/downloads/) or [OpenJDK](https://openjdk.org/)
 
 ## How to Run Simulation
 
-Create a script `run_simulation.sh` (or `run_simulation.bat` on Windows):
+This project includes pre-configured scripts to easily run the simulation.
 
-**Windows:**
-```batch
-@echo off
-cd /d %~dp0
-mvn compile dependency:build-classpath -Dmdep.outputFile=classpath
-for /f %%i in (classpath) do set CLASSPATH=%%i;target/classes
-java -cp "%CLASSPATH%" com.aura.simulation.SimulationRunner
-pause
-```
+### Using the Provided Script (Recommended)
 
-Or manually:
+**On Windows:**
 ```bash
-mvn compile exec:java@run-sim
+run_simulation.bat
 ```
 
-**Unix/Linux/Mac:**
+**On Unix/Linux/Mac:**
 ```bash
-#!/bin/bash
-mvn compile dependency:build-classpath -Dmdep.outputFile=classpath
-CLASSPATH=$(cat classpath):target/classes
-java -cp $CLASSPATH com.aura.simulation.SimulationRunner
+./run_simulation.sh
 ```
 
-The simulation will run three scenarios:
+These scripts will:
+1. Compile all Java files using `javac`
+2. Execute the simulation runner
+3. Display results and pause for review
+
+### What the Simulation Demonstrates
+
+The simulation runs three scenarios:
 - **Scenario A**: Normal purchase with standard pricing
 - **Scenario B**: Runtime pricing strategy switch (Standard → Emergency → Discounted)
 - **Scenario C**: Atomic rollback when hardware fails
+
+Output files are generated in the `data/` directory:
+- `inventory.json`: Final inventory state
+- `transactions.json`: Transaction history
 

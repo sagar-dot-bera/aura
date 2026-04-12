@@ -1,9 +1,21 @@
 @echo off
 REM Aura Retail OS - Simulation Runner
-REM This script compiles the project and runs the SimulationRunner with proper classpath
+REM This script compiles the project and runs the SimulationRunner
 
-echo Compiling project...
-mvn clean compile
+echo Creating target/classes directory...
+if not exist target\classes mkdir target\classes
+
+echo.
+echo Compiling Java files...
+javac -d target\classes ^
+    src\main\java\com\aura\inventory\*.java ^
+    src\main\java\com\aura\pricing\*.java ^
+    src\main\java\com\aura\command\*.java ^
+    src\main\java\com\aura\hardware\*.java ^
+    src\main\java\com\aura\registry\*.java ^
+    src\main\java\com\aura\core\*.java ^
+    src\main\java\com\aura\simulation\*.java
+
 if ERRORLEVEL 1 (
     echo Compilation failed!
     pause
@@ -11,19 +23,10 @@ if ERRORLEVEL 1 (
 )
 
 echo.
-echo Building classpath with dependencies...
-mvn dependency:build-classpath -Dmdep.outputFile=classpath.txt > nul 2>&1
-
-echo.
 echo Running Simulation...
 echo.
 
-REM Read classpath from file and run the simulation
-setlocal enabledelayedexpansion
-for /f %%i in (classpath.txt) do set CLASSPATH=%%i
-set CLASSPATH=!CLASSPATH!;target/classes
-
-java -cp "!CLASSPATH!" com.aura.simulation.SimulationRunner
+java -cp target\classes com.aura.simulation.SimulationRunner
 
 echo.
 echo Simulation complete. Check data/ directory for inventory.json and transactions.json
