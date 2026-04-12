@@ -48,6 +48,6 @@ java -cp $CLASSPATH com.aura.simulation.SimulationRunner
 
 The simulation will run three scenarios:
 - **Scenario A**: Normal purchase with standard pricing
-- **Scenario B**: Runtime pricing strategy switch (Standard → Emergency → Discounted)
+- **Scenario B**: Runtime pricing strategy switch
 - **Scenario C**: Atomic rollback when hardware fails
 
