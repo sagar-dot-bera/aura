@@ -1,4 +1,4 @@
-package aura.command;
+package com.aura.command;
 
 /**
  * Command pattern: encapsulates a request as an object.

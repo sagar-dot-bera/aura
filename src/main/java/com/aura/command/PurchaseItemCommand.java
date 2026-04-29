@@ -1,82 +1,165 @@
 package com.aura.command;
 
+import com.aura.event.EventBus;
+import com.aura.event.HardwareFailureEvent;
+import com.aura.event.TransactionCompletedEvent;
+import com.aura.event.TransactionFailedEvent;
+import com.aura.failure.FailureContext;
+import com.aura.failure.FailureHandler;
 import com.aura.hardware.HardwareController;
 import com.aura.inventory.InventoryManager;
 import com.aura.inventory.InventorySnapshot;
 import com.aura.inventory.Product;
+import com.aura.payment.PaymentProcessor;
+import com.aura.persistence.PersistenceService;
 import com.aura.pricing.PricingStrategy;
+import com.aura.verification.VerificationModule;
 
 import java.util.UUID;
 
 /**
- * Command pattern: encapsulates a purchase request with rollback capability.
- * Uses Memento pattern (InventorySnapshot) for atomicity.
+ * Command Pattern: operation object for purchase transactions.
+ * Memento Pattern: snapshot used for rollback.
  */
 public class PurchaseItemCommand implements Command {
-    private String productId;
-    private int qty;
-    private InventoryManager inventoryMgr;
-    private HardwareController hardware;
-    private PricingStrategy pricing;
+    private final String productId;
+    private final int quantity;
+    private final InventoryManager inventoryManager;
+    private final HardwareController hardwareController;
+    private final PricingStrategy pricingStrategy;
+    private final PaymentProcessor paymentProcessor;
+    private final VerificationModule verificationModule;
+    private final EventBus eventBus;
+    private final PersistenceService persistenceService;
+    private final FailureHandler failureChain;
+    // Memento Pattern: snapshot used for rollback
     private InventorySnapshot snapshot;
-    private String transactionId;
+    private final String transactionId;
+    private boolean paymentProcessed;
 
-    public PurchaseItemCommand(String productId, int qty, InventoryManager inventoryMgr,
-            HardwareController hardware, PricingStrategy pricing) {
+    public PurchaseItemCommand(String productId, int quantity,
+            InventoryManager inventoryManager,
+            HardwareController hardwareController,
+            PricingStrategy pricingStrategy,
+            PaymentProcessor paymentProcessor,
+            VerificationModule verificationModule,
+            EventBus eventBus,
+            PersistenceService persistenceService,
+            FailureHandler failureChain) {
         this.productId = productId;
-        this.qty = qty;
-        this.inventoryMgr = inventoryMgr;
-        this.hardware = hardware;
-        this.pricing = pricing;
+        this.quantity = quantity;
+        this.inventoryManager = inventoryManager;
+        this.hardwareController = hardwareController;
+        this.pricingStrategy = pricingStrategy;
+        this.paymentProcessor = paymentProcessor;
+        this.verificationModule = verificationModule;
+        this.eventBus = eventBus;
+        this.persistenceService = persistenceService;
+        this.failureChain = failureChain;
         this.transactionId = UUID.randomUUID().toString();
+        this.paymentProcessed = false;
     }
 
     @Override
     public void execute() {
-        // 1. Create a snapshot of current inventory state
-        snapshot = inventoryMgr.createSnapshot();
+        // Command Pattern: operation object
+        snapshot = inventoryManager.createSnapshot();
 
-        // 2. Try to reserve the items
-        boolean reserved = inventoryMgr.reserveItem(productId, qty);
-        if (!reserved) {
+        if (!inventoryManager.reserveItem(productId, quantity, transactionId)) {
+            publishFailure("Insufficient stock");
+            persistenceService.saveTransaction(log());
             throw new RuntimeException("Out of stock for product: " + productId);
         }
 
-        // Get the transaction ID of the reservation
-        // We need to track which transaction was created
-        String txId = inventoryMgr.getLastReservationTxId();
+        if (!verificationModule.verify(productId, quantity)) {
+            inventoryManager.rollbackReservation(transactionId);
+            inventoryManager.restoreSnapshot(snapshot);
+            publishFailure("Verification failed");
+            persistenceService.saveTransaction(log());
+            throw new RuntimeException("Verification failed for product: " + productId);
+        }
 
-        // 3. Try to dispense from hardware
-        boolean dispensed = hardware.dispense(productId);
+        Product product = inventoryManager.getProduct(productId);
+        double totalCost = pricingStrategy.computePrice(product, quantity);
+        if (!paymentProcessor.processPayment(transactionId, totalCost)) {
+            inventoryManager.rollbackReservation(transactionId);
+            inventoryManager.restoreSnapshot(snapshot);
+            publishFailure("Payment failed");
+            persistenceService.saveTransaction(log());
+            throw new RuntimeException("Payment failed for product: " + productId);
+        }
+        paymentProcessed = true;
+
+        boolean dispensed = hardwareController.dispense(productId);
         if (!dispensed) {
-            // Rollback the reservation if dispense fails
-            if (txId != null) {
-                inventoryMgr.rollbackReservation(txId);
+            publishHardwareFailure();
+            boolean recovered = attemptFailureRecovery();
+            if (recovered) {
+                dispensed = hardwareController.dispense(productId);
             }
+        }
+
+        if (!dispensed) {
+            if (paymentProcessed) {
+                paymentProcessor.refund(transactionId, totalCost);
+            }
+            inventoryManager.rollbackReservation(transactionId);
+            inventoryManager.restoreSnapshot(snapshot);
+            publishFailure("Dispense failed");
+            persistenceService.saveTransaction(log());
             throw new RuntimeException("Hardware dispense failed for product: " + productId);
         }
 
-        // 4. Commit the reservation (deduct from stock)
-        if (txId != null) {
-            inventoryMgr.commitReservation(txId);
+        inventoryManager.commitReservation(transactionId);
+        publishSuccess(totalCost);
+        persistenceService.saveTransaction(log());
+    }
+
+    private void publishSuccess(double amount) {
+        if (eventBus != null) {
+            eventBus.publish(new TransactionCompletedEvent(transactionId, productId, quantity, amount));
         }
+    }
+
+    private void publishFailure(String reason) {
+        if (eventBus != null) {
+            eventBus.publish(new TransactionFailedEvent(transactionId, productId, quantity, reason));
+        }
+    }
+
+    private void publishHardwareFailure() {
+        if (eventBus != null) {
+            eventBus.publish(new HardwareFailureEvent("dispenser", productId, "DISPENSE_FAILURE"));
+        }
+    }
+
+    private boolean attemptFailureRecovery() {
+        if (failureChain == null) {
+            return false;
+        }
+        FailureContext context = new FailureContext("DISPENSE_FAILURE", "dispenser", productId);
+        context.setRecalibrationSucceeded(hardwareController.recalibrate("dispenser"));
+        return failureChain.handle(context);
     }
 
     @Override
     public void undo() {
-        // Restore inventory to the snapshot state
         if (snapshot != null) {
-            inventoryMgr.restoreSnapshot(snapshot);
+            inventoryManager.restoreSnapshot(snapshot);
         }
     }
 
     @Override
     public String log() {
-        Product product = inventoryMgr.getProduct(productId);
+        Product product = inventoryManager.getProduct(productId);
         String productName = product != null ? product.getName() : productId;
-        double price = product != null ? pricing.computePrice(product) : 0.0;
-        return String.format("PURCHASE[%s] productId=%s qty=%d price=%.2f total=%.2f",
-                transactionId, productId, qty, price, price * qty);
+        double unitPrice = product != null ? pricingStrategy.computePrice(product) : 0.0;
+        return "PURCHASE[" + transactionId + "] productId=" + productId
+                + " name=" + productName
+                + " qty=" + quantity
+                + " unitPrice=" + unitPrice
+                + " total=" + (unitPrice * quantity)
+                + " provider=" + paymentProcessor.getProviderName();
     }
 
     public String getTransactionId() {
