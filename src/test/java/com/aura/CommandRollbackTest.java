@@ -4,7 +4,15 @@ import com.aura.command.PurchaseItemCommand;
 import com.aura.hardware.HardwareController;
 import com.aura.inventory.InventoryManager;
 import com.aura.inventory.Product;
+import com.aura.event.EventBus;
+import com.aura.failure.FailureHandler;
+import com.aura.failure.RecalibrationHandler;
+import com.aura.failure.RetryHandler;
+import com.aura.failure.TechnicianAlertHandler;
+import com.aura.payment.CardPaymentProcessor;
+import com.aura.persistence.PersistenceService;
 import com.aura.pricing.StandardPricingStrategy;
+import com.aura.verification.NoVerificationModule;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -19,12 +27,18 @@ public class CommandRollbackTest {
     private InventoryManager inventoryManager;
     private HardwareController hardwareController;
     private StandardPricingStrategy pricingStrategy;
+    private EventBus eventBus;
+    private PersistenceService persistenceService;
+    private FailureHandler failureChain;
 
     @BeforeEach
     public void setUp() {
         inventoryManager = new InventoryManager();
         hardwareController = new HardwareController();
         pricingStrategy = new StandardPricingStrategy();
+        eventBus = new EventBus();
+        persistenceService = new PersistenceService();
+        failureChain = buildFailureChain();
 
         // Set up initial inventory
         Product product = new Product("P001", "Paracetamol", 5.0, 10);
@@ -42,7 +56,8 @@ public class CommandRollbackTest {
 
         // Execute purchase command
         PurchaseItemCommand cmd = new PurchaseItemCommand("P001", 2, inventoryManager,
-                hardwareController, pricingStrategy);
+                hardwareController, pricingStrategy, new CardPaymentProcessor(),
+                new NoVerificationModule(), eventBus, persistenceService, failureChain);
         cmd.execute();
 
         int stockAfter = inventoryManager.getAvailableStock("P001");
@@ -57,7 +72,8 @@ public class CommandRollbackTest {
 
         // First successful purchase to change the state
         PurchaseItemCommand cmd1 = new PurchaseItemCommand("P001", 2, inventoryManager,
-                hardwareController, pricingStrategy);
+                hardwareController, pricingStrategy, new CardPaymentProcessor(),
+                new NoVerificationModule(), eventBus, persistenceService, failureChain);
         cmd1.execute();
 
         int stockAfterFirst = inventoryManager.getAvailableStock("P001");
@@ -65,10 +81,12 @@ public class CommandRollbackTest {
 
         // Simulate hardware failure
         hardwareController.simulateFailure("dispenser");
+        hardwareController.failNextRecalibration();
 
         // Try to purchase when hardware is failed - should throw exception
         PurchaseItemCommand cmd2 = new PurchaseItemCommand("P001", 3, inventoryManager,
-                hardwareController, pricingStrategy);
+                hardwareController, pricingStrategy, new CardPaymentProcessor(),
+                new NoVerificationModule(), eventBus, persistenceService, failureChain);
 
         // Expecting RuntimeException due to hardware failure
         RuntimeException exception = assertThrows(RuntimeException.class, cmd2::execute);
@@ -87,12 +105,21 @@ public class CommandRollbackTest {
 
         // Try to purchase more than available
         PurchaseItemCommand cmd = new PurchaseItemCommand("P001", 20, inventoryManager,
-                hardwareController, pricingStrategy);
+                hardwareController, pricingStrategy, new CardPaymentProcessor(),
+                new NoVerificationModule(), eventBus, persistenceService, failureChain);
 
         assertThrows(RuntimeException.class, cmd::execute);
 
         // Stock should not have changed
         int stockAfter = inventoryManager.getAvailableStock("P001");
         assertEquals(10, stockAfter);
+    }
+
+    private FailureHandler buildFailureChain() {
+        FailureHandler retry = new RetryHandler();
+        FailureHandler recalibrate = new RecalibrationHandler();
+        FailureHandler technician = new TechnicianAlertHandler();
+        retry.setNext(recalibrate).setNext(technician);
+        return retry;
     }
 }

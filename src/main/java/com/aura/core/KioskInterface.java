@@ -2,6 +2,7 @@ package com.aura.core;
 
 import java.util.Map;
 
+// Facade Pattern: simplified external interface
 /**
  * Interface defining core kiosk operations.
  */

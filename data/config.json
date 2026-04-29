@@ -1,0 +1,7 @@
+{
+  "systemStatus":"OPERATIONAL",
+  "emergencyMode":false,
+  "emergencyPurchaseLimit":2,
+  "essentialProducts":[S001, E001, E002],
+  "config":{}
+}
