@@ -3,9 +3,16 @@ package com.aura.pricing;
 import com.aura.inventory.Product;
 
 /**
- * Emergency pricing strategy: no markup, base price only.
+ * Strategy Pattern: Emergency pricing strategy.
+ * Fair pricing with no markup during emergencies - capped at base price.
  */
 public class EmergencyPricingStrategy implements PricingStrategy {
+
+    @Override
+    public double computePrice(Product product, int quantity) {
+        // During emergency, provide fair pricing with no unfair markup
+        return product.getBasePrice() * quantity;
+    }
 
     @Override
     public double computePrice(Product product) {
@@ -14,6 +21,6 @@ public class EmergencyPricingStrategy implements PricingStrategy {
 
     @Override
     public String getPolicyName() {
-        return "EMERGENCY";
+        return "EMERGENCY (Fair pricing, no markup)";
     }
 }

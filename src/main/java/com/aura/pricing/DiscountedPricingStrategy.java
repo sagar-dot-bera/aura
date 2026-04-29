@@ -3,7 +3,8 @@ package com.aura.pricing;
 import com.aura.inventory.Product;
 
 /**
- * Discounted pricing strategy: applies a percentage discount.
+ * Strategy Pattern: Discounted pricing strategy.
+ * Applies a percentage discount to the base price.
  */
 public class DiscountedPricingStrategy implements PricingStrategy {
     private double discountRate; // e.g., 0.10 for 10% off
@@ -18,6 +19,12 @@ public class DiscountedPricingStrategy implements PricingStrategy {
 
     public void setDiscountRate(double discountRate) {
         this.discountRate = discountRate;
+    }
+
+    @Override
+    public double computePrice(Product product, int quantity) {
+        double discountedUnitPrice = product.getBasePrice() * (1.0 - discountRate);
+        return discountedUnitPrice * quantity;
     }
 
     @Override
