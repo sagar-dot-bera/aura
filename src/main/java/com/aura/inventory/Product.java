@@ -9,6 +9,7 @@ public class Product {
     private double basePrice;
     private int stockCount;
     private boolean available;
+    private String requiredHardwareModule;
 
     public Product(String productId, String name, double basePrice, int stockCount) {
         this.productId = productId;
@@ -16,6 +17,16 @@ public class Product {
         this.basePrice = basePrice;
         this.stockCount = stockCount;
         this.available = stockCount > 0;
+        this.requiredHardwareModule = "dispenser";
+    }
+
+    public Product(String productId, String name, double basePrice, int stockCount, String requiredHardwareModule) {
+        this.productId = productId;
+        this.name = name;
+        this.basePrice = basePrice;
+        this.stockCount = stockCount;
+        this.available = stockCount > 0;
+        this.requiredHardwareModule = requiredHardwareModule;
     }
 
     public String getProductId() {
@@ -64,6 +75,19 @@ public class Product {
         this.available = this.stockCount > 0;
     }
 
+    public void incrementStock(int qty) {
+        this.stockCount += qty;
+        this.available = this.stockCount > 0;
+    }
+
+    public String getRequiredHardwareModule() {
+        return requiredHardwareModule;
+    }
+
+    public void setRequiredHardwareModule(String requiredHardwareModule) {
+        this.requiredHardwareModule = requiredHardwareModule;
+    }
+
     @Override
     public String toString() {
         return "Product{" +
@@ -72,6 +96,7 @@ public class Product {
                 ", basePrice=" + basePrice +
                 ", stockCount=" + stockCount +
                 ", available=" + available +
+                ", requiredHardwareModule='" + requiredHardwareModule + '\'' +
                 '}';
     }
 }
